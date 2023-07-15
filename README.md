@@ -1,13 +1,6 @@
 # xhjh-xyf
 OS：
 1、基本命令
- 	id
- 	ls
- 	pwd
- 	hostname
- 	file
- 	touch
- 	vim
  	mkdir -p
  	cp -r 
  	mv
@@ -172,8 +165,49 @@ mysqldump -u username -p password --databases database_name > backup.sql
 mysqldump -u username -p password database_name table_name > backup.sql
 systemctl restart vncserver@\:1
 
+9、网桥
 yum install bridge-utils tunctl
  lsmod | grep tun
   lsmod | grep bridge
   cd /etc/sysconfig/network-scripts/
   vim ifcfg-br0
+  DEVICE=br0
+TYPE=Bridge
+STP=yes
+IPADDR=172.31.200.46
+PREFIX=16
+GATEWAY=172.31.0.254
+DNS1=172.31.0.248
+BOOTPROTO=none
+ONBOOT=yes
+DELAY=0
+
+ vim ifcfg-ens224
+ TYPE=Ethernet
+BOOTPROTO=none
+NAME=ens224
+DEVICE=ens224
+ONBOOT=yes
+BRIDGE=br0
+
+ vim /etc/libvirt/qemu/centos7.xml
+  virsh define /etc/libvirt/qemu/centos7.xml
+
+10、NAT
+ virsh net-list --all
+ sysctl net.ipv4.ip_forward=1
+ vim /etc/libvirt/qemu/networks/nat_net.xml
+ virsh net-define /etc/libvirt/qemu/networks/nat_net.xml
+ virsh net-list --all
+ virsh net-start nat_net
+ virsh net-autostart nat_net
+
+  virsh attach-interface kvm1 --type bridge \
+--source virbr1 --model virtio --config --live
+
+ virsh domiflist kvm1
+ virsh start kvm1
+ virsh console kvm1
+
+
+11、
