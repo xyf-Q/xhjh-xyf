@@ -314,3 +314,54 @@ nginx -s reload
 
 
 curl vm01#curl自己测试
+
+
+15、DB
+docker run -p 13306:3306 --name mysql8 -e MYSQL_ROOT_PASSWORD=Test_pwd_2023 -d mysql:8.0.26
+docker ps -a # 观察进程已经处于 up 状态, 再进行下一步
+docker cp  mysql8:/etc/mysql /opt/mysql_test/master/conf
+docker cp  mysql8:/etc/mysql /opt/mysql_test/slave/conf
+docker stop mysql8
+docker rm mysql8
+
+# 修改 slave 配置文件中的 server-id, 防止后面搭建复制异常
+$ echo 'server-id = 2' | sudo tee -a /opt/mysql_test/slave/conf/mysql/my.cnf
+
+
+
+
+
+docker run  -itd  -p 13307:3306 \
+--name mysql8-slave \
+--privileged=true  \
+-v /opt/mysql_test/slave/conf/mysql:/etc/mysql  \
+-v /opt/mysql_test/slave/logs:/logs  \
+-v /opt/mysql_test/slave/data:/var/lib/mysql \
+-e MYSQL_ROOT_PASSWORD=Test_pwd_2023  \
+-e MYSQL_ROOT_HOST='%' \
+-d mysql:8.0.26 \
+--default_authentication_plugin=mysql_native_password
+
+create user admin@'%' identified by 'Test_pwd_2023';
+grant all on *.* to admin@'%' with grant option;
+
+
+
+change master to
+master_user='admin',
+master_password='Test_pwd_2023',
+master_host='', 
+master_port=13306, 
+master_log_file='xxx', 
+master_log_pos=xxx; 
+
+CREATE TABLE `test1` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `k` int NOT NULL DEFAULT '0',
+  `c` char(120) NOT NULL DEFAULT '',
+  `pad` char(60) NOT NULL DEFAULT '',
+  PRIMARY KEY (`id`),
+  KEY `k_1` (`k`)
+) ENGINE=InnoDB ;
+
+mysqlbinlog --no-defaults -v  --base64-output=decode-rows  --start-datetime='2023-07-12 11:00:00'  --stop-datetime='2023-07-12 12:00:00'  -d xyf_db  /opt/mysql_test/slave/data/binlog.000002 > ~/recover.log
