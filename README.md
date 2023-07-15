@@ -210,4 +210,107 @@ BRIDGE=br0
  virsh console kvm1
 
 
-11、
+11、LVS负载均衡
+====node2和node3上配置=====
+systemctl disable firewalld
+systemctl stop firewalld
+setenforce 0
+yum install net-tools epel-release nginx
+mv /usr/share/nginx/html/* /tmp
+
+---node2---
+echo "this is node2" > /usr/share/nginx/html/index.html
+---node3---
+echo "this is node3" > /usr/share/nginx/html/index.html
+
+systemctl enable nginx --now
+ifconfig lo:0 192.168.122.20 broadcast 192.168.122.20 netmask 255.255.255.255 up
+route add -host 192.168.122.20 dev lo:0
+echo "1" >/proc/sys/net/ipv4/conf/lo/arp_ignore
+echo "2" >/proc/sys/net/ipv4/conf/lo/arp_announce
+echo "1" >/proc/sys/net/ipv4/conf/all/arp_ignore
+echo "2" >/proc/sys/net/ipv4/conf/all/arp_announce
+ip addr
+
+===node1===
+systemctl stop firewalld
+systemctl disable firewalld
+setenforce 0
+cp /etc/sysconfig/network-scripts/ifcfg-eth0 /etc/sysconfig/network-scripts/ifcfg-eth0:0
+
+vim /etc/sysconfig/network-scripts/ifcfg-ens3:0
+DEVICE=ens3:0
+NM_CONTROLLED=no
+ONBOOT=yes
+IPADDR=192.168.122.20
+NETMASK=255.255.255.0
+
+systemctl restart network
+ip addr
+
+vim /etc/sysctl.conf
+net.ipv4.ip_forward = 1
+
+sysctl -p
+yum install ipvsadm -y
+ipvsadm
+lsmod | grep ip_vs
+touch /etc/sysconfig/ipvsadm
+systemctl start ipvsadm
+
+ipvsadm -A -t 192.168.122.20:80 -s wrr
+ipvsadm -a -t 192.168.122.20:80 -r 192.168.122.124:80 -g -w 1
+ipvsadm -a -t 192.168.122.20:80 -r 192.168.122.191:80 -g -w 1
+ipvsadm -Ln
+
+curl 192.168.122.20		//多执行几次，查看效果
+
+12 nginx反向代理
+yum -y install httpd
+vim /etc/httpd/conf/httpd.conf
+echo 'hello httpd' > /var/www/html/index.html
+systemctl start httpd
+vim /etc/nginx/conf.d/proxy.conf
+server {
+ listen 80;
+ server_name www.proxy.com;
+ location / {
+ proxy_pass http://127.0.0.1:8080;
+ } }
+
+ nginx -t
+ systemctl restart nginx
+ curl 127.0.0.1
+
+
+13、七层负载
+后端2台：
+yum install httpd -y
+echo `hostname` > /var/www/html/index.html
+systemctl enable --now httpd
+systemctl disable firewalld
+systemctl stop firewalld
+setenforce 0
+
+前端1台：
+先确认nginx正常运行：
+systemctl status nginx
+cd /etc/nginx/conf.d/
+vim httpLB.conf
+upstream servers{
+ server vm02:80;#用主机名称的话，先在/etc/hosts里配置一下
+ server vm03:80;
+}
+server {
+listen 80;
+server_name vm01;
+location / {
+proxy_pass http://servers;
+}}
+
+
+nginx -t
+nginx -s reload
+
+
+curl vm01#curl自己测试
